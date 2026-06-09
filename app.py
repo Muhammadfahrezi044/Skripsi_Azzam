@@ -1,6 +1,7 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
+import matplotlib.subplots as plt
 import matplotlib.pyplot as plt
 import seaborn as sns
 import yfinance as yf
@@ -51,6 +52,10 @@ def load_data(start, end):
     df_raw = yf.download("^JKSE", start=str(start), end=str(end), auto_adjust=False)
     if isinstance(df_raw.columns, pd.MultiIndex):
         df_raw.columns = df_raw.columns.get_level_values(0)
+    
+    # Membersihkan nama kolom dari spasi gaib agar sinkron dengan fitur model
+    df_raw.columns = [str(col).strip() for col in df_raw.columns]
+    
     df = df_raw[["Open", "High", "Low", "Close", "Adj Close", "Volume"]].copy()
     df.index.name = "Date"
     df = df.sort_index()
@@ -192,9 +197,9 @@ sns.heatmap(df_model[features + [target]].corr(), annot=True, cmap="coolwarm", f
 ax7.set_title("Matriks Korelasi Fitur & Target")
 plt.tight_layout(); st.pyplot(fig7); plt.close()
 
-# Train/test split
+# Train/test split (shuffle=False diterapkan di sini untuk data saham)
 X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=test_size / 100, random_state=42, shuffle=True
+    X, y, test_size=test_size / 100, random_state=42, shuffle=False
 )
 st.info(f"**Data Latih:** {X_train.shape[0]} baris &nbsp;|&nbsp; **Data Uji:** {X_test.shape[0]} baris")
 
@@ -295,13 +300,25 @@ sns.histplot(residual_dt, bins=40, kde=True, color="red",  ax=axes13[1])
 axes13[1].axvline(0, color="black", linestyle="--"); axes13[1].set_title("Residual – Decision Tree")
 plt.tight_layout(); st.pyplot(fig13); plt.close()
 
-# MAPE comparison bar
-fig14, ax14 = plt.subplots(figsize=(7, 4))
-sns.barplot(x="Model", y="MAPE (%)", data=hasil, palette=["steelblue", "tomato"], ax=ax14)
-for i, v in enumerate(hasil["MAPE (%)"]):
-    ax14.text(i, v + 0.02, f"{v:.4f}%", ha="center", fontweight="bold")
-ax14.set_title("Perbandingan MAPE antar Model"); plt.tight_layout()
-st.pyplot(fig14); plt.close()
+# Grafik Metrik Menggunakan Melt (Disamakan dengan file Colab)
+st.subheader("📊 Grafik Perbandingan Metrik Error")
+hasil_melt = hasil.melt(id_vars="Model", value_vars=["MAPE (%)", "MAE", "RMSE"], var_name="Metrik", value_name="Nilai")
+
+fig14, ax14 = plt.subplots(figsize=(10, 5))
+sns.barplot(x="Metrik", y="Nilai", hue="Model", data=hasil_melt, palette=["steelblue", "tomato"], ax=ax14)
+ax14.set_title("Perbandingan Metrik Error (Regresi Linier vs Pohon Keputusan)")
+ax14.set_ylabel("Nilai")
+ax14.set_xlabel("Metrik")
+
+for p in ax14.patches:
+    height = p.get_height()
+    if height > 0:
+        ax14.annotate(f"{height:,.2f}", (p.get_x() + p.get_width() / 2., height),
+                      ha='center', va='center', xytext=(0, 6), textcoords='offset points', fontsize=9, fontweight='bold')
+
+plt.tight_layout()
+st.pyplot(fig14)
+plt.close()
 
 # ── 6. Prediksi Manual ───────────────────────
 st.header("6. Prediksi Manual")
