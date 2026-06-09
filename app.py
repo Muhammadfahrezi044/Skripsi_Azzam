@@ -399,25 +399,130 @@ for i, v in enumerate(hasil["MAPE (%)"]):
 ax14.set_title("Perbandingan MAPE antar Model"); plt.tight_layout()
 st.pyplot(fig14); plt.close()
 
-# ── 6. Prediksi Manual ───────────────────────
-st.header("6. Prediksi Manual")
-st.markdown("Masukkan nilai fitur secara manual untuk mendapatkan prediksi harga penutupan.")
+# ── 6. Prediksi via File CSV ─────────────────
+st.header("6. Prediksi via File CSV (Massal)")
+st.markdown("Unggah file CSV baru (dari Investing.id atau sumber lain) untuk mendapatkan prediksi harga penutupan secara massal sekaligus.")
 
-latest = df_model[features].iloc[-1]
-with st.form("pred_form"):
-    cols = st.columns(4)
-    vals = {}
-    for i, feat in enumerate(features):
-        vals[feat] = cols[i % 4].number_input(feat, value=float(latest[feat]), format="%.4f")
-    submitted = st.form_submit_button("🔮 Prediksi")
+# Komponen Uploader File Baru khusus untuk Prediksi
+file_prediksi = st.file_uploader("Unggah File CSV untuk Prediksi", type=["csv"], key="uploader_prediksi")
 
-if submitted:
-    inp = np.array([[vals[f] for f in features]])
-    pred_lr_val = lr_model.predict(inp)[0]
-    pred_dt_val = dt_model.predict(inp)[0]
-    p1, p2 = st.columns(2)
-    p1.metric("Linear Regression", f"Rp {pred_lr_val:,.2f}")
-    p2.metric("Decision Tree",     f"Rp {pred_dt_val:,.2f}")
+if file_prediksi is not None:
+    # 1. Membaca file data baru
+    df_pred_raw = pd.read_csv(file_prediksi)
+    daftar_kolom_pred = list(df_pred_raw.columns)
+    
+    st.markdown("### 🔍 Konfigurasi Pemetaan Kolom Data Baru")
+    st.info("Sistem mendeteksi kolom berikut. Silakan sesuaikan jika tebakan otomatis di bawah ini kurang tepat:")
+
+    # Fungsi deteksi kolom otomatis (Fuzzy Detection) khusus section prediksi
+    def tebak_kolom_pred(pilihan, kata_kunci):
+        for p in pilihan:
+            if any(kw in str(p).lower() for kw in kata_kunci):
+                return pilihan.index(p)
+        return 0
+
+    # Grid Pemetaan Kolom dengan Key Unik agar tidak bentrok dengan Section 1
+    cp1, cp2, cp3 = st.columns(3)
+    with cp1:
+        col_date_p = st.selectbox("📅 Kolom Tanggal:", daftar_kolom_pred, index=tebak_kolom_pred(daftar_kolom_pred, ['tang', 'date', 'time', 'tgl']), key="p_date")
+        col_open_p = st.selectbox("📈 Kolom Open / Pembukaan:", daftar_kolom_pred, index=tebak_kolom_pred(daftar_kolom_pred, ['buka', 'open', 'pembukaan']), key="p_open")
+    with cp2:
+        col_high_p = st.selectbox("🔼 Kolom High / Tertinggi:", daftar_kolom_pred, index=tebak_kolom_pred(daftar_kolom_pred, ['tinggi', 'high', 'max', 'tertinggi']), key="p_high")
+        col_low_p = st.selectbox("🔽 Kolom Low / Terendah:", daftar_kolom_pred, index=tebak_kolom_pred(daftar_kolom_pred, ['rendah', 'low', 'min', 'terendah']), key="p_low")
+    with cp3:
+        col_close_p = st.selectbox("🎯 Kolom Close / Terakhir (Target):", daftar_kolom_pred, index=tebak_kolom_pred(daftar_kolom_pred, ['akhir', 'close', 'tutup', 'terakhir', 'terupdate']), key="p_close")
+        col_volume_p = st.selectbox("📊 Kolom Volume / Vol.:", daftar_kolom_pred, index=tebak_kolom_pred(daftar_kolom_pred, ['vol', 'volume']), key="p_volume")
+
+    # Fungsi lokal untuk membersihkan format teks angka Investing ke Float murni
+    def bersihkan_nilai_pred(val):
+        if pd.isna(val) or str(val).strip() in ['-', '']:
+            return 0.0
+        val_str = str(val).strip()
+        
+        multiplier = 1
+        if val_str.upper().endswith('M'):
+            multiplier = 1_000_000
+            val_str = val_str[:-1]
+        elif val_str.upper().endswith('B'):
+            multiplier = 1_000_000_000
+            val_str = val_str[:-1]
+        elif val_str.upper().endswith('K'):
+            multiplier = 1_000
+            val_str = val_str[:-1]
+            
+        if '.' in val_str and ',' in val_str:
+            val_str = val_str.replace('.', '').replace(',', '.')
+        elif ',' in val_str:
+            if len(val_str.split(',')[1]) <= 2:
+                val_str = val_str.replace(',', '.')
+            else:
+                val_str = val_str.replace(',', '')
+                
+        try:
+            return float(val_str) * multiplier
+        except:
+            return 0.0
+
+    try:
+        # 2. Proses Transformasi Data Input Baru
+        df_p = pd.DataFrame()
+        df_p['Open'] = df_pred_raw[col_open_p].apply(bersihkan_nilai_pred)
+        df_p['High'] = df_pred_raw[col_high_p].apply(bersihkan_nilai_pred)
+        df_p['Low'] = df_pred_raw[col_low_p].apply(bersihkan_nilai_pred)
+        df_p['Close_Aktual'] = df_pred_raw[col_close_p].apply(bersihkan_nilai_pred)
+        df_p['Volume'] = df_pred_raw[col_volume_p].apply(bersihkan_nilai_pred)
+        
+        df_p.index = pd.to_datetime(df_pred_raw[col_date_p], errors='coerce')
+        df_p.index.name = "Date"
+        df_p = df_p.dropna(subset=['Open', 'High', 'Low', 'Volume']).sort_index()
+
+        # 3. Otomatisasi Pembuatan Indikator / Fitur Turunan (Feature Engineering)
+        # Menggunakan min_periods=1 agar baris awal tetap mendapat nilai kalkulasi tanpa NaN berlebih
+        df_p["Daily Return"] = df_p["Close_Aktual"].pct_change().fillna(0.0)
+        df_p["SMA_50"]       = df_p["Close_Aktual"].rolling(50, min_periods=1).mean()
+        df_p["SMA_200"]      = df_p["Close_Aktual"].rolling(200, min_periods=1).mean()
+        df_p["RSI"]          = compute_rsi(df_p["Close_Aktual"], period=rsi_period).fillna(50.0)
+
+        # Filter dataframe hanya berisi fitur yang dikenali oleh model latih sebelumnya
+        X_p = df_p[features]
+
+        # 4. Eksekusi Prediksi Massal
+        df_p["Prediksi_Linear_Regression"] = lr_model.predict(X_p)
+        df_p["Prediksi_Decision_Tree"] = dt_model.predict(X_p)
+
+        st.success("🔮 Prediksi Massal Berhasil Diselesaikan!")
+
+        # 5. Visualisasi Tabel Hasil Akhir
+        st.markdown("### 📊 Tabel Hasil Komparasi Prediksi")
+        kolom_tampil = ["Open", "High", "Low", "Volume", "Close_Aktual", "Prediksi_Linear_Regression", "Prediksi_Decision_Tree"]
+        
+        st.dataframe(
+            df_p[kolom_tampil].style.format({
+                "Open": "Rp {:,.2f}",
+                "High": "Rp {:,.2f}",
+                "Low": "Rp {:,.2f}",
+                "Volume": "{:,.0f}",
+                "Close_Aktual": "Rp {:,.2f}",
+                "Prediksi_Linear_Regression": "Rp {:,.2f}",
+                "Prediksi_Decision_Tree": "Rp {:,.2f}"
+            }),
+            use_container_width=True
+        )
+
+        # 6. Fitur Ekspor / Download Hasil Prediksi Berupa CSV Baru
+        csv_download = df_p.to_csv().encode('utf-8')
+        st.download_button(
+            label="📥 Unduh File Hasil Prediksi (CSV)",
+            data=csv_download,
+            file_name="hasil_prediksi_saham_massal.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+
+    except Exception as e:
+        st.error(f"❌ Gagal memproses file data baru untuk prediksi: {e}")
+else:
+    st.info("💡 Silakan unggah file `.csv` di atas untuk melakukan prediksi data harga saham secara massal.")
 
 st.divider()
 st.caption("Dibuat dengan Streamlit · Data Integration Dashboard")
