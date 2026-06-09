@@ -129,7 +129,8 @@ st.pyplot(fig)
 plt.close()
 
 # Candlestick (setahun terakhir)
-last_year = df.last("365D").copy()
+cutoff_date = df.index.max() - pd.Timedelta(days=365)
+last_year = df[df.index >= cutoff_date].copy()
 fig, ax = plt.subplots(figsize=(14, 6))
 width = 0.6
 for date, row in last_year.iterrows():
