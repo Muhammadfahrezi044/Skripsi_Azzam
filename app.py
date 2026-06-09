@@ -18,6 +18,8 @@ from sklearn.metrics import (
 
 warnings.filterwarnings("ignore")
 sns.set_style("whitegrid")
+plt.rcParams["figure.figsize"] = (12, 5)
+plt.rcParams["axes.grid"] = True
 
 # ─────────────────────────────────────────────
 # PAGE CONFIG & SESSION STATE
@@ -31,7 +33,7 @@ st.set_page_config(
 st.title("📈 Prediksi Harga Saham IHSG (^JKSE)")
 st.caption("Linear Regression vs Decision Tree Regressor · Versi Integrasi Lengkap Colab & Multi-Source Ingestion")
 
-# Inisialisasi session_state agar aplikasi tidak reset saat interaksi widget
+# Inisialisasi session_state agar aplikasi tidak reset saat interaksi widget (seperti saat klik download/upload)
 if "analisis_berjalan" not in st.session_state:
     st.session_state["analisis_berjalan"] = False
 
@@ -65,8 +67,10 @@ with st.sidebar:
 @st.cache_data(show_spinner="Mengunduh data dari Yahoo Finance…")
 def load_data(start, end):
     df_raw = yf.download("^JKSE", start=str(start), end=str(end), auto_adjust=False)
+    # Flatten MultiIndex jika versi yfinance baru menggunakannya
     if isinstance(df_raw.columns, pd.MultiIndex):
         df_raw.columns = df_raw.columns.get_level_values(0)
+    # Bersihkan nama kolom dari spasi tersembunyi
     df_raw.columns = [str(col).strip() for col in df_raw.columns]
     df = df_raw[["Open", "High", "Low", "Close", "Adj Close", "Volume"]].copy()
     df.index.name = "Date"
@@ -99,6 +103,7 @@ def bersihkan_nilai(val):
         return 0.0
     val_str = str(val).strip()
     
+    # Konversi format Volume Investing.com (M=Juta, B=Miliar, K=Ribu)
     multiplier = 1
     if val_str.upper().endswith('M'):
         multiplier = 1_000_000
@@ -110,6 +115,7 @@ def bersihkan_nilai(val):
         multiplier = 1_000
         val_str = val_str[:-1]
         
+    # Konversi titik ribuan dan koma desimal ala Indonesia
     if '.' in val_str and ',' in val_str:
         val_str = val_str.replace('.', '').replace(',', '.')
     elif ',' in val_str:
@@ -146,6 +152,7 @@ else:
         st.warning("⚠️ Silakan unggah file dataset CSV terlebih dahulu di sidebar lalu klik Jalankan Analisis!")
         st.stop()
     
+    # Baca file mentah
     df_raw = pd.read_csv(file_dataset)
     daftar_kolom = list(df_raw.columns)
     
@@ -182,6 +189,7 @@ else:
         st.error(f"❌ Terjadi kesalahan pemrosesan struktur file: {e}")
         st.stop()
 
+# ── Tampilan Data ────────────────────────────
 st.header("1. Pemahaman Data")
 c1, c2, c3 = st.columns(3)
 c1.metric("Total Baris Data", f"{df.shape[0]:,}")
@@ -207,7 +215,7 @@ axes[1].set_title("Volume Perdagangan Saham"); axes[1].set_ylabel("Volume")
 plt.tight_layout()
 st.pyplot(fig); plt.close()
 
-# Perbaikan pemotongan grafik candlestick setahun terakhir secara aman
+# Perbaikan pemotongan grafik candlestick setahun terakhir secara aman (mengganti .last())
 terakhir = df.index.max()
 mulai_tanggal = terakhir - pd.Timedelta(days=365)
 last_year = df.loc[mulai_tanggal:].copy()
@@ -310,7 +318,7 @@ st.dataframe(
     }), use_container_width=True
 )
 
-# Integrasi Grafik Komparasi Grouped Bar Chart (.melt()) Sesuai File Google Colab
+# Grafik Grouped Bar Chart Menggunakan metode .melt() dari File Colab
 st.subheader("📊 Grafik Perbandingan Metrik Error")
 hasil_melt = hasil.melt(id_vars="Model", value_vars=["MAPE (%)", "MAE", "RMSE"], var_name="Metrik", value_name="Nilai")
 
@@ -319,6 +327,7 @@ sns.barplot(x="Metrik", y="Nilai", hue="Model", data=hasil_melt, palette=["steel
 ax9.set_title("Perbandingan Metrik Error Model (Sesuai Hasil Google Colab)")
 ax9.set_ylabel("Nilai Parameter")
 
+# Penambahan text di atas batang chart
 for p in ax9.patches:
     height = p.get_height()
     if height > 0:
@@ -326,7 +335,7 @@ for p in ax9.patches:
                     ha='center', va='center', xytext=(0, 6), textcoords='offset points', fontsize=9, fontweight='bold')
 plt.tight_layout(); st.pyplot(fig9); plt.close()
 
-# Grafik Line Perbandingan Aktual vs Prediksi
+# Line Plot Pergerakan Aktual vs Prediksi
 plot_df = pd.DataFrame({"Aktual": y_test, "Linear Regression": y_pred_lr, "Decision Tree": y_pred_dt}, index=X_test.index).sort_index()
 fig10, ax10 = plt.subplots(figsize=(14, 4))
 ax10.plot(plot_df.index, plot_df["Aktual"], label="Harga Aktual", color="black", linewidth=1.5)
