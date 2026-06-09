@@ -182,8 +182,8 @@ ax6.set_title("RSI"); ax6.set_ylabel("RSI"); ax6.legend()
 plt.tight_layout(); st.pyplot(fig6); plt.close()
 
 # Feature selection
-features  = ["Open", "High", "Low", "Volume", "Daily Return", "SMA_50", "SMA_200", "RSI"]
-target    = "Close"
+features  = ["Pembukaan", "Tertinggi", "Terendah", "Vol.", "Perubahan%"]
+target    = "Terakhir"
 df_model  = df.dropna().copy()
 X         = df_model[features]
 y         = df_model[target]
