@@ -307,6 +307,7 @@ ax14.set_title("Perbandingan MAPE antar Model"); plt.tight_layout()
 st.pyplot(fig14); plt.close()
 
 # ── 6. Prediksi via File CSV ───────────────────
+# ── 6. Prediksi via File CSV ───────────────────
 st.header("6. Prediksi via File CSV")
 st.markdown("Unggah file `.csv` yang berisi kolom fitur untuk mendapatkan prediksi harga penutupan secara massal.")
 
@@ -346,12 +347,14 @@ if uploaded_file is not None:
                 output_df.style.format({
                     "Prediksi Linear Regression": "Rp {:,.2f}",
                     "Prediksi Decision Tree": "Rp {:,.2f}",
-                    "Close": "{:,.2f}",
-                    "Pembukaan": "{:,.2f}",
-                    "Tertinggi": "{:,.2f}",
-                    "Terendah": "{:,.2f}",
-                    "Vol.": "{:,.0f}",
-                    "Perubahan%": "{:,.4f}",
+                    "Open": "{:,.2f}",
+                    "High": "{:,.2f}",
+                    "Low": "{:,.2f}",
+                    "Volume": "{:,.0f}",
+                    "Daily Return": "{:,.4f}",
+                    "SMA_50": "{:,.2f}",
+                    "SMA_200": "{:,.2f}",
+                    "RSI": "{:,.2f}"
                 }), 
                 use_container_width=True
             )
@@ -366,5 +369,7 @@ if uploaded_file is not None:
                 use_container_width=True
             )
             
+    except Exception as e:
+        st.error(f"🚨 Terjadi kesalahan saat memproses file: {e}")
     except Exception as e:
         st.error(f"🚨 Terjadi kesalahan saat memproses file: {e}")
