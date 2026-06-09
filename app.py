@@ -18,11 +18,9 @@ from sklearn.metrics import (
 
 warnings.filterwarnings("ignore")
 sns.set_style("whitegrid")
-plt.rcParams["figure.figsize"] = (12, 5)
-plt.rcParams["axes.grid"] = True
 
 # ─────────────────────────────────────────────
-# PAGE CONFIG & SESSION STATE
+# PAGE CONFIG
 # ─────────────────────────────────────────────
 st.set_page_config(
     page_title="Prediksi Saham IHSG",
@@ -31,47 +29,28 @@ st.set_page_config(
 )
 
 st.title("📈 Prediksi Harga Saham IHSG (^JKSE)")
-st.caption("Linear Regression vs Decision Tree Regressor · Versi Integrasi Lengkap Colab & Multi-Source Ingestion")
-
-# Inisialisasi session_state agar aplikasi tidak reset saat interaksi widget (seperti saat klik download/upload)
-if "analisis_berjalan" not in st.session_state:
-    st.session_state["analisis_berjalan"] = False
+st.caption("Linear Regression vs Decision Tree Regressor · Data: Yahoo Finance")
 
 # ─────────────────────────────────────────────
-# SIDEBAR CONFIGURATION
+# SIDEBAR
 # ─────────────────────────────────────────────
 with st.sidebar:
     st.header("⚙️ Pengaturan")
-    
-    # Opsi Sumber Data Utama
-    sumber_data = st.radio("Pilih Sumber Data:", ["Yahoo Finance (Otomatis)", "Unggah Dataset CSV (Investing.id / Lainnya)"])
-    
-    if sumber_data == "Yahoo Finance (Otomatis)":
-        start_date = st.date_input("Tanggal Mulai", value=pd.Timestamp("2020-01-01"))
-        end_date   = st.date_input("Tanggal Akhir",  value=pd.Timestamp("2026-03-31"))
-        file_dataset = None
-    else:
-        file_dataset = st.file_uploader("Unggah File CSV Dataset Utama", type=["csv"])
-        
+    start_date = st.date_input("Tanggal Mulai", value=pd.Timestamp("2020-01-01"))
+    end_date   = st.date_input("Tanggal Akhir",  value=pd.Timestamp("2026-03-31"))
     test_size  = st.slider("Ukuran Data Uji (%)", min_value=10, max_value=40, value=20, step=5)
     dt_depth   = st.slider("Max Depth Decision Tree", min_value=3, max_value=20, value=10)
     rsi_period = st.slider("Periode RSI", min_value=7, max_value=28, value=14)
-    
-    # Memicu perubahan state saat tombol diklik
-    if st.button("🚀 Jalankan Analisis", use_container_width=True):
-        st.session_state["analisis_berjalan"] = True
+    run_btn    = st.button("🚀 Jalankan Analisis", use_container_width=True)
 
 # ─────────────────────────────────────────────
-# CORE HELPERS
+# HELPERS
 # ─────────────────────────────────────────────
 @st.cache_data(show_spinner="Mengunduh data dari Yahoo Finance…")
 def load_data(start, end):
     df_raw = yf.download("^JKSE", start=str(start), end=str(end), auto_adjust=False)
-    # Flatten MultiIndex jika versi yfinance baru menggunakannya
     if isinstance(df_raw.columns, pd.MultiIndex):
         df_raw.columns = df_raw.columns.get_level_values(0)
-    # Bersihkan nama kolom dari spasi tersembunyi
-    df_raw.columns = [str(col).strip() for col in df_raw.columns]
     df = df_raw[["Open", "High", "Low", "Close", "Adj Close", "Volume"]].copy()
     df.index.name = "Date"
     df = df.sort_index()
@@ -98,139 +77,16 @@ def evaluate(y_true, y_pred, name):
     }
 
 
-def bersihkan_nilai(val):
-    if pd.isna(val) or str(val).strip() in ['-', '']:
-        return 0.0
-    val_str = str(val).strip()
-    
-    # Konversi format Volume Investing.com (M=Juta, B=Miliar, K=Ribu)
-    multiplier = 1
-    if val_str.upper().endswith('M'):
-        multiplier = 1_000_000
-        val_str = val_str[:-1]
-    elif val_str.upper().endswith('B'):
-        multiplier = 1_000_000_000
-        val_str = val_str[:-1]
-    elif val_str.upper().endswith('K'):
-        multiplier = 1_000
-        val_str = val_str[:-1]
-        
-    # Konversi titik ribuan dan koma desimal ala Indonesia
-    if '.' in val_str and ',' in val_str:
-        val_str = val_str.replace('.', '').replace(',', '.')
-    elif ',' in val_str:
-        if len(val_str.split(',')[1]) <= 2:
-            val_str = val_str.replace(',', '.')
-        else:
-            val_str = val_str.replace(',', '')
-            
-    try:
-        return float(val_str) * multiplier
-    except:
-        return 0.0
-
-
-def tebak_kolom(pilihan, kata_kunci):
-    for p in pilihan:
-        if any(kw in str(p).lower() for kw in kata_kunci):
-            return pilihan.index(p)
-    return 0
-
-
 # ─────────────────────────────────────────────
-# MAIN EXECUTION INTERFACE
+# MAIN
 # ─────────────────────────────────────────────
-if not st.session_state["analisis_berjalan"]:
-    st.info("👈 Atur parameter atau unggah file di sidebar lalu klik **Jalankan Analisis**.")
+if not run_btn:
+    st.info("👈 Atur parameter di sidebar lalu klik **Jalankan Analisis**.")
     st.stop()
 
 # ── 1. Load & preprocess ─────────────────────
-if sumber_data == "Yahoo Finance (Otomatis)":
-    df = load_data(start_date, end_date)
-else:
-    if file_dataset is None:
-        st.warning("⚠️ Silakan unggah file dataset CSV terlebih dahulu di sidebar lalu klik Jalankan Analisis!")
-        st.stop()
-    
-    # Membaca data mentah CSV
-    df_raw = pd.read_csv(file_dataset)
-    daftar_kolom = list(df_raw.columns)
-    
-    st.success("📊 Dataset Berhasil Diunggah!")
-    st.markdown("### 🔍 Konfigurasi Pemetaan Kolom")
-    st.info("Cocokkan nama kolom di bawah jika sistem salah mendeteksi secara otomatis:")
+df = load_data(start_date, end_date)
 
-    # Deteksi otomatis berbasis kemiripan kata (Fuzzy Detection)
-    def tebak_kolom(pilihan, kata_kunci):
-        for p in pilihan:
-            if any(kw in str(p).lower() for kw in kata_kunci):
-                return pilihan.index(p)
-        return 0
-
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        col_date = st.selectbox("📅 Kolom Tanggal:", daftar_kolom, index=tebak_kolom(daftar_kolom, ['tang', 'date', 'time', 'tgl']))
-        col_open = st.selectbox("📈 Kolom Open / Pembukaan:", daftar_kolom, index=tebak_kolom(daftar_kolom, ['buka', 'open', 'pembukaan']))
-    with c2:
-        col_high = st.selectbox("🔼 Kolom High / Tertinggi:", daftar_kolom, index=tebak_kolom(daftar_kolom, ['tinggi', 'high', 'max', 'tertinggi']))
-        col_low = st.selectbox("🔽 Kolom Low / Terendah:", daftar_kolom, index=tebak_kolom(daftar_kolom, ['rendah', 'low', 'min', 'terendah']))
-    with c3:
-        col_close = st.selectbox("🎯 Kolom Close / Terakhir:", daftar_kolom, index=tebak_kolom(daftar_kolom, ['akhir', 'close', 'tutup', 'terakhir', 'terupdate', 'perubahan']))
-        col_volume = st.selectbox("📊 Kolom Volume / Vol.:", daftar_kolom, index=tebak_kolom(daftar_kolom, ['vol', 'volume']))
-
-    # Fungsi khusus pembersih angka teks (Mengubah format Investing ke Float murni)
-    def bersihkan_nilai(val):
-        if pd.isna(val) or str(val).strip() in ['-', '']:
-            return 0.0
-        val_str = str(val).strip()
-        
-        # Penanganan satuan Volume (M = Juta, B = Miliar, K = Ribu)
-        multiplier = 1
-        if val_str.upper().endswith('M'):
-            multiplier = 1_000_000
-            val_str = val_str[:-1]
-        elif val_str.upper().endswith('B'):
-            multiplier = 1_000_000_000
-            val_str = val_str[:-1]
-        elif val_str.upper().endswith('K'):
-            multiplier = 1_000
-            val_str = val_str[:-1]
-            
-        # Atasi pemisah ribuan berupa titik (.) dan desimal koma (,) khas Indonesia
-        if '.' in val_str and ',' in val_str:
-            val_str = val_str.replace('.', '').replace(',', '.')
-        elif ',' in val_str:
-            if len(val_str.split(',')[1]) <= 2:
-                val_str = val_str.replace(',', '.')
-            else:
-                val_str = val_str.replace(',', '')
-                
-        try:
-            return float(val_str) * multiplier
-        except:
-            return 0.0
-
-    try:
-        # Satukan data ke DataFrame standar 'df'
-        df = pd.DataFrame()
-        df['Open'] = df_raw[col_open].apply(bersihkan_nilai)
-        df['High'] = df_raw[col_high].apply(bersihkan_nilai)
-        df['Low'] = df_raw[col_low].apply(bersihkan_nilai)
-        df['Close'] = df_raw[col_close].apply(bersihkan_nilai)
-        df['Volume'] = df_raw[col_volume].apply(bersihkan_nilai)
-        
-        df.index = pd.to_datetime(df_raw[col_date], errors='coerce')
-        df.index.name = "Date"
-        df = df.dropna().sort_index()
-        
-        if df.empty:
-            st.error("❌ Hasil konversi menghasilkan data kosong. Periksa format kolom Tanggal Anda.")
-            st.stop()
-    except Exception as e:
-        st.error(f"❌ Terjadi kesalahan pemrosesan file CSV: {e}")
-        st.stop()
-
-# --- TAMPILAN BERIKUTNYA TETAP BERJALAN NORMAL ---
 st.header("1. Pemahaman Data")
 
 c1, c2, c3 = st.columns(3)
@@ -258,11 +114,8 @@ axes[1].set_title("Volume Perdagangan"); axes[1].set_ylabel("Volume")
 plt.tight_layout()
 st.pyplot(fig); plt.close()
 
-# Perbaikan error df.last("365D") dengan menggunakan timedelta indexing aman
-terakhir = df.index.max()
-mulai_tanggal = terakhir - pd.Timedelta(days=365)
-last_year = df.loc[mulai_tanggal:].copy()
-
+# Candlestick (setahun terakhir)
+last_year = df.last("365D").copy()
 fig2, ax2 = plt.subplots(figsize=(14, 5))
 for date, row in last_year.iterrows():
     color = "green" if row["Close"] >= row["Open"] else "red"
@@ -448,75 +301,25 @@ for i, v in enumerate(hasil["MAPE (%)"]):
 ax14.set_title("Perbandingan MAPE antar Model"); plt.tight_layout()
 st.pyplot(fig14); plt.close()
 
-# ── 6. Prediksi via File CSV Massal ───────────
-st.header("6. Prediksi via File CSV (Massal)")
-st.markdown("Unggah file `.csv` baru (dari Investing.id atau platform lain) untuk langsung mendapatkan prediksi penutupan secara massal.")
+# ── 6. Prediksi Manual ───────────────────────
+st.header("6. Prediksi Manual")
+st.markdown("Masukkan nilai fitur secara manual untuk mendapatkan prediksi harga penutupan.")
 
-file_prediksi = st.file_uploader("Unggah File CSV Baru Untuk Prediksi", type=["csv"], key="uploader_prediksi")
+latest = df_model[features].iloc[-1]
+with st.form("pred_form"):
+    cols = st.columns(4)
+    vals = {}
+    for i, feat in enumerate(features):
+        vals[feat] = cols[i % 4].number_input(feat, value=float(latest[feat]), format="%.4f")
+    submitted = st.form_submit_button("🔮 Prediksi")
 
-if file_prediksi is not None:
-    df_pred_raw = pd.read_csv(file_prediksi)
-    daftar_kolom_pred = list(df_pred_raw.columns)
-    
-    st.markdown("### 🔍 Konfigurasi Pemetaan Kolom Data Prediksi")
-    
-    cp1, cp2, cp3 = st.columns(3)
-    with cp1:
-        col_date_p = st.selectbox("📅 Kolom Tanggal:", daftar_kolom_pred, index=tebak_kolom(daftar_kolom_pred, ['tang', 'date', 'time', 'tgl']), key="p_date")
-        col_open_p = st.selectbox("📈 Kolom Open / Pembukaan:", daftar_kolom_pred, index=tebak_kolom(daftar_kolom_pred, ['buka', 'open', 'pembukaan']), key="p_open")
-    with cp2:
-        col_high_p = st.selectbox("🔼 Kolom High / Tertinggi:", daftar_kolom_pred, index=tebak_kolom(daftar_kolom_pred, ['tinggi', 'high', 'max', 'tertinggi']), key="p_high")
-        col_low_p = st.selectbox("🔽 Kolom Low / Terendah:", daftar_kolom_pred, index=tebak_kolom(daftar_kolom_pred, ['rendah', 'low', 'min', 'terendah']), key="p_low")
-    with cp3:
-        col_close_p = st.selectbox("🎯 Kolom Close / Terakhir (Target):", daftar_kolom_pred, index=tebak_kolom(daftar_kolom_pred, ['akhir', 'close', 'tutup', 'terakhir', 'terupdate']), key="p_close")
-        col_volume_p = st.selectbox("📊 Kolom Volume / Vol.:", daftar_kolom_pred, index=tebak_kolom(daftar_kolom_pred, ['vol', 'volume']), key="p_volume")
-
-    try:
-        df_p = pd.DataFrame()
-        df_p['Open'] = df_pred_raw[col_open_p].apply(bersihkan_nilai)
-        df_p['High'] = df_pred_raw[col_high_p].apply(bersihkan_nilai)
-        df_p['Low'] = df_pred_raw[col_low_p].apply(bersihkan_nilai)
-        df_p['Close_Aktual'] = df_pred_raw[col_close_p].apply(bersihkan_nilai)
-        df_p['Volume'] = df_pred_raw[col_volume_p].apply(bersihkan_nilai)
-        
-        df_p.index = pd.to_datetime(df_pred_raw[col_date_p], errors='coerce')
-        df_p.index.name = "Date"
-        df_p = df_p.dropna(subset=['Open', 'High', 'Low', 'Volume']).sort_index()
-
-        # Pembuatan Fitur Otomatis pada Skenario Sekuens Data Baru
-        df_p["Daily Return"] = df_p["Close_Aktual"].pct_change().fillna(0.0)
-        df_p["SMA_50"]       = df_p["Close_Aktual"].rolling(50, min_periods=1).mean()
-        df_p["SMA_200"]      = df_p["Close_Aktual"].rolling(200, min_periods=1).mean()
-        df_p["RSI"]          = compute_rsi(df_p["Close_Aktual"], period=rsi_period).fillna(50.0)
-
-        # Proses Klasifikasi Prediksi Massal Model
-        X_p = df_p[features]
-        df_p["Prediksi_Linear_Regression"] = lr_model.predict(X_p)
-        df_p["Prediksi_Decision_Tree"]     = dt_model.predict(X_p)
-
-        st.success("🎉 Prediksi Massal Berhasil Diselesaikan!")
-        
-        kolom_tampil = ["Open", "High", "Low", "Volume", "Close_Aktual", "Prediksi_Linear_Regression", "Prediksi_Decision_Tree"]
-        st.dataframe(
-            df_p[kolom_tampil].style.format({
-                "Open": "Rp {:,.2f}", "High": "Rp {:,.2f}", "Low": "Rp {:,.2f}", "Volume": "{:,.0f}",
-                "Close_Aktual": "Rp {:,.2f}", "Prediksi_Linear_Regression": "Rp {:,.2f}", "Prediksi_Decision_Tree": "Rp {:,.2f}"
-            }), use_container_width=True
-        )
-
-        # Tombol Unduh Output CSV
-        csv_download = df_p.to_csv().encode('utf-8')
-        st.download_button(
-            label="📥 Unduh File Hasil Prediksi (CSV)",
-            data=csv_download,
-            file_name="hasil_prediksi_saham_massal.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
-    except Exception as e:
-        st.error(f"❌ Gagal mengeksekusi kalkulasi prediksi pada data baru: {e}")
-else:
-    st.info("💡 Unggah berkas berkode `.csv` pada area di atas untuk melakukan pengujian data baru.")
+if submitted:
+    inp = np.array([[vals[f] for f in features]])
+    pred_lr_val = lr_model.predict(inp)[0]
+    pred_dt_val = dt_model.predict(inp)[0]
+    p1, p2 = st.columns(2)
+    p1.metric("Linear Regression", f"Rp {pred_lr_val:,.2f}")
+    p2.metric("Decision Tree",     f"Rp {pred_dt_val:,.2f}")
 
 st.divider()
-st.caption("Dibuat dengan Streamlit · Data Integration Dashboard")
+st.caption("Dibuat dengan Streamlit · Data: Yahoo Finance (^JKSE)")
