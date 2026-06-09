@@ -303,25 +303,67 @@ for i, v in enumerate(hasil["MAPE (%)"]):
 ax14.set_title("Perbandingan MAPE antar Model"); plt.tight_layout()
 st.pyplot(fig14); plt.close()
 
-# ── 6. Prediksi Manual ───────────────────────
-st.header("6. Prediksi Manual")
-st.markdown("Masukkan nilai fitur secara manual untuk mendapatkan prediksi harga penutupan.")
+# ── 6. Prediksi via File CSV ───────────────────
+st.header("6. Prediksi via File CSV")
+st.markdown("Unggah file `.csv` yang berisi kolom fitur untuk mendapatkan prediksi harga penutupan secara massal.")
 
-latest = df_model[features].iloc[-1]
-with st.form("pred_form"):
-    cols = st.columns(4)
-    vals = {}
-    for i, feat in enumerate(features):
-        vals[feat] = cols[i % 4].number_input(feat, value=float(latest[feat]), format="%.4f")
-    submitted = st.form_submit_button("🔮 Prediksi")
+# Memberitahu user format kolom yang wajib ada di dalam file CSV
+st.info(f"💡 **Format Kolom CSV Harus Tepat:** {', '.join(features)}")
 
-if submitted:
-    inp = np.array([[vals[f] for f in features]])
-    pred_lr_val = lr_model.predict(inp)[0]
-    pred_dt_val = dt_model.predict(inp)[0]
-    p1, p2 = st.columns(2)
-    p1.metric("Linear Regression", f"Rp {pred_lr_val:,.2f}")
-    p2.metric("Decision Tree",     f"Rp {pred_dt_val:,.2f}")
+# Komponen untuk upload file
+uploaded_file = st.file_uploader("Pilih file CSV", type=["csv"])
 
-st.divider()
-st.caption("Dibuat dengan Streamlit · Data: Yahoo Finance (^JKSE)")
+if uploaded_file is not None:
+    try:
+        # Membaca file CSV yang diunggah
+        input_df = pd.read_csv(uploaded_file)
+        
+        # Validasi: Cek apakah semua fitur yang dibutuhkan ada di dalam file CSV tersebut
+        missing_cols = [col for col in features if col not in input_df.columns]
+        
+        if missing_cols:
+            st.error(f"❌ File CSV kekurangan kolom berikut: {', '.join(missing_cols)}")
+        else:
+            # Mengambil data fitur saja sesuai urutan yang benar untuk input model
+            X_manual = input_df[features]
+            
+            # Melakukan prediksi massal
+            pred_lr = lr_model.predict(X_manual)
+            pred_dt = dt_model.predict(X_manual)
+            
+            # Membuat dataframe baru untuk menampung hasil
+            output_df = input_df.copy()
+            output_df["Prediksi Linear Regression"] = pred_lr
+            output_df["Prediksi Decision Tree"] = pred_dt
+            
+            st.success("🎉 Prediksi Berhasil! Berikut adalah hasil data beserta prediksinya:")
+            
+            # Menampilkan hasil data ke dalam tabel Streamlit dengan format mata uang Rp
+            st.dataframe(
+                output_df.style.format({
+                    "Prediksi Linear Regression": "Rp {:,.2f}",
+                    "Prediksi Decision Tree": "Rp {:,.2f}",
+                    "Open": "{:,.2f}",
+                    "High": "{:,.2f}",
+                    "Low": "{:,.2f}",
+                    "Volume": "{:,.0f}",
+                    "Daily Return": "{:,.4f}",
+                    "SMA_50": "{:,.2f}",
+                    "SMA_200": "{:,.2f}",
+                    "RSI": "{:,.2f}"
+                }), 
+                use_container_width=True
+            )
+            
+            # Menyediakan tombol download untuk mengunduh hasil prediksi berupa file CSV baru
+            csv_buffer = output_df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Unduh Hasil Prediksi (.csv)",
+                data=csv_buffer,
+                file_name="hasil_prediksi_ihsg.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+            
+    except Exception as e:
+        st.error(f"🚨 Terjadi kesalahan saat memproses file: {e}")
