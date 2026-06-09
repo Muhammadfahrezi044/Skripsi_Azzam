@@ -28,24 +28,30 @@ st.set_page_config(
     layout="wide",
 )
 
-if "analisis_berjalan" not in st.session_state:
-    st.session_state["analisis_berjalan"] = False
-
 st.title("📈 Prediksi Harga Saham IHSG (^JKSE)")
-st.caption("Linear Regression vs Decision Tree Regressor · Data: Yahoo Finance")
+st.caption("Linear Regression vs Decision Tree Regressor · Opsi Multipurpose Dataset Source")
 
 # ─────────────────────────────────────────────
 # SIDEBAR
 # ─────────────────────────────────────────────
 with st.sidebar:
     st.header("⚙️ Pengaturan")
-    start_date = st.date_input("Tanggal Mulai", value=pd.Timestamp("2020-01-01"))
-    end_date   = st.date_input("Tanggal Akhir",  value=pd.Timestamp("2026-03-31"))
+    
+    # Fitur Baru: Pilihan Sumber Data Multi-Opsi
+    sumber_data = st.radio("Pilih Sumber Data:", ["Yahoo Finance (Otomatis)", "Unggah Dataset CSV (Investing.id / Lainnya)"])
+    
+    if sumber_data == "Yahoo Finance (Otomatis)":
+        start_date = st.date_input("Tanggal Mulai", value=pd.Timestamp("2020-01-01"))
+        end_date   = st.date_input("Tanggal Akhir",  value=pd.Timestamp("2026-03-31"))
+        file_dataset = None
+    else:
+        file_dataset = st.file_uploader("Unggah File CSV Dataset", type=["csv"])
+        
     test_size  = st.slider("Ukuran Data Uji (%)", min_value=10, max_value=40, value=20, step=5)
     dt_depth   = st.slider("Max Depth Decision Tree", min_value=3, max_value=20, value=10)
     rsi_period = st.slider("Periode RSI", min_value=7, max_value=28, value=14)
-    if st.button("🚀 Jalankan Analisis", use_container_width=True):
-        st.session_state["analisis_berjalan"] = True
+    run_btn    = st.button("🚀 Jalankan Analisis", use_container_width=True)
+
 # ─────────────────────────────────────────────
 # HELPERS
 # ─────────────────────────────────────────────
@@ -54,6 +60,8 @@ def load_data(start, end):
     df_raw = yf.download("^JKSE", start=str(start), end=str(end), auto_adjust=False)
     if isinstance(df_raw.columns, pd.MultiIndex):
         df_raw.columns = df_raw.columns.get_level_values(0)
+    # Hapus spasi tak terlihat di nama kolom bawaan yfinance
+    df_raw.columns = [str(col).strip() for col in df_raw.columns]
     df = df_raw[["Open", "High", "Low", "Close", "Adj Close", "Volume"]].copy()
     df.index.name = "Date"
     df = df.sort_index()
@@ -83,13 +91,97 @@ def evaluate(y_true, y_pred, name):
 # ─────────────────────────────────────────────
 # MAIN
 # ─────────────────────────────────────────────
-if not st.session_state["analisis_berjalan"]:
+if not run_btn:
     st.info("👈 Atur parameter di sidebar lalu klik **Jalankan Analisis**.")
     st.stop()
 
 # ── 1. Load & preprocess ─────────────────────
-df = load_data(start_date, end_date)
+if sumber_data == "Yahoo Finance (Otomatis)":
+    df = load_data(start_date, end_date)
+else:
+    if file_dataset is None:
+        st.warning("⚠️ Silakan unggah file dataset CSV terlebih dahulu di sidebar lalu klik Jalankan Analisis!")
+        st.stop()
+    
+    # Membaca data mentah CSV
+    df_raw = pd.read_csv(file_dataset)
+    daftar_kolom = list(df_raw.columns)
+    
+    st.success("📊 Dataset Berhasil Diunggah!")
+    st.markdown("### 🔍 Konfigurasi Pemetaan Kolom")
+    st.info("Cocokkan nama kolom di bawah jika sistem salah mendeteksi secara otomatis:")
 
+    # Deteksi otomatis berbasis kemiripan kata (Fuzzy Detection)
+    def tebak_kolom(pilihan, kata_kunci):
+        for p in pilihan:
+            if any(kw in str(p).lower() for kw in kata_kunci):
+                return pilihan.index(p)
+        return 0
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        col_date = st.selectbox("📅 Kolom Tanggal:", daftar_kolom, index=tebak_kolom(daftar_kolom, ['tang', 'date', 'time', 'tgl']))
+        col_open = st.selectbox("📈 Kolom Open / Pembukaan:", daftar_kolom, index=tebak_kolom(daftar_kolom, ['buka', 'open', 'pembukaan']))
+    with c2:
+        col_high = st.selectbox("🔼 Kolom High / Tertinggi:", daftar_kolom, index=tebak_kolom(daftar_kolom, ['tinggi', 'high', 'max', 'tertinggi']))
+        col_low = st.selectbox("🔽 Kolom Low / Terendah:", daftar_kolom, index=tebak_kolom(daftar_kolom, ['rendah', 'low', 'min', 'terendah']))
+    with c3:
+        col_close = st.selectbox("🎯 Kolom Close / Terakhir:", daftar_kolom, index=tebak_kolom(daftar_kolom, ['akhir', 'close', 'tutup', 'terakhir', 'terupdate', 'perubahan']))
+        col_volume = st.selectbox("📊 Kolom Volume / Vol.:", daftar_kolom, index=tebak_kolom(daftar_kolom, ['vol', 'volume']))
+
+    # Fungsi khusus pembersih angka teks (Mengubah format Investing ke Float murni)
+    def bersihkan_nilai(val):
+        if pd.isna(val) or str(val).strip() in ['-', '']:
+            return 0.0
+        val_str = str(val).strip()
+        
+        # Penanganan satuan Volume (M = Juta, B = Miliar, K = Ribu)
+        multiplier = 1
+        if val_str.upper().endswith('M'):
+            multiplier = 1_000_000
+            val_str = val_str[:-1]
+        elif val_str.upper().endswith('B'):
+            multiplier = 1_000_000_000
+            val_str = val_str[:-1]
+        elif val_str.upper().endswith('K'):
+            multiplier = 1_000
+            val_str = val_str[:-1]
+            
+        # Atasi pemisah ribuan berupa titik (.) dan desimal koma (,) khas Indonesia
+        if '.' in val_str and ',' in val_str:
+            val_str = val_str.replace('.', '').replace(',', '.')
+        elif ',' in val_str:
+            if len(val_str.split(',')[1]) <= 2:
+                val_str = val_str.replace(',', '.')
+            else:
+                val_str = val_str.replace(',', '')
+                
+        try:
+            return float(val_str) * multiplier
+        except:
+            return 0.0
+
+    try:
+        # Satukan data ke DataFrame standar 'df'
+        df = pd.DataFrame()
+        df['Open'] = df_raw[col_open].apply(bersihkan_nilai)
+        df['High'] = df_raw[col_high].apply(bersihkan_nilai)
+        df['Low'] = df_raw[col_low].apply(bersihkan_nilai)
+        df['Close'] = df_raw[col_close].apply(bersihkan_nilai)
+        df['Volume'] = df_raw[col_volume].apply(bersihkan_nilai)
+        
+        df.index = pd.to_datetime(df_raw[col_date], errors='coerce')
+        df.index.name = "Date"
+        df = df.dropna().sort_index()
+        
+        if df.empty:
+            st.error("❌ Hasil konversi menghasilkan data kosong. Periksa format kolom Tanggal Anda.")
+            st.stop()
+    except Exception as e:
+        st.error(f"❌ Terjadi kesalahan pemrosesan file CSV: {e}")
+        st.stop()
+
+# --- TAMPILAN BERIKUTNYA TETAP BERJALAN NORMAL ---
 st.header("1. Pemahaman Data")
 
 c1, c2, c3 = st.columns(3)
@@ -117,10 +209,11 @@ axes[1].set_title("Volume Perdagangan"); axes[1].set_ylabel("Volume")
 plt.tight_layout()
 st.pyplot(fig); plt.close()
 
-# Candlestick (setahun terakhir)
+# Perbaikan error df.last("365D") dengan menggunakan timedelta indexing aman
 terakhir = df.index.max()
 mulai_tanggal = terakhir - pd.Timedelta(days=365)
 last_year = df.loc[mulai_tanggal:].copy()
+
 fig2, ax2 = plt.subplots(figsize=(14, 5))
 for date, row in last_year.iterrows():
     color = "green" if row["Close"] >= row["Open"] else "red"
@@ -182,8 +275,8 @@ ax6.set_title("RSI"); ax6.set_ylabel("RSI"); ax6.legend()
 plt.tight_layout(); st.pyplot(fig6); plt.close()
 
 # Feature selection
-features  = ["Pembukaan", "Tertinggi", "Terendah", "Vol.", "Perubahan%"]
-target    = "Terakhir"
+features  = ["Open", "High", "Low", "Volume", "Daily Return", "SMA_50", "SMA_200", "RSI"]
+target    = "Close"
 df_model  = df.dropna().copy()
 X         = df_model[features]
 y         = df_model[target]
@@ -306,69 +399,25 @@ for i, v in enumerate(hasil["MAPE (%)"]):
 ax14.set_title("Perbandingan MAPE antar Model"); plt.tight_layout()
 st.pyplot(fig14); plt.close()
 
-# ── 6. Prediksi via File CSV ───────────────────
-st.header("6. Prediksi via File CSV")
-st.markdown("Apakah ada saham lain yang ingin anda analisis? Jika ada, anda bisa mengunggah file `.csv` yang berisi kolom fitur untuk mendapatkan prediksi harga penutupan secara massal.")
+# ── 6. Prediksi Manual ───────────────────────
+st.header("6. Prediksi Manual")
+st.markdown("Masukkan nilai fitur secara manual untuk mendapatkan prediksi harga penutupan.")
 
-# Memberitahu user format kolom yang wajib ada di dalam file CSV
-st.info(f"💡 **Format Kolom CSV Harus Tepat:** {', '.join(features)}")
+latest = df_model[features].iloc[-1]
+with st.form("pred_form"):
+    cols = st.columns(4)
+    vals = {}
+    for i, feat in enumerate(features):
+        vals[feat] = cols[i % 4].number_input(feat, value=float(latest[feat]), format="%.4f")
+    submitted = st.form_submit_button("🔮 Prediksi")
 
-# Komponen untuk upload file
-uploaded_file = st.file_uploader("Pilih file CSV", type=["csv"])
+if submitted:
+    inp = np.array([[vals[f] for f in features]])
+    pred_lr_val = lr_model.predict(inp)[0]
+    pred_dt_val = dt_model.predict(inp)[0]
+    p1, p2 = st.columns(2)
+    p1.metric("Linear Regression", f"Rp {pred_lr_val:,.2f}")
+    p2.metric("Decision Tree",     f"Rp {pred_dt_val:,.2f}")
 
-if uploaded_file is not None:
-    try:
-        # Membaca file CSV yang diunggah
-        input_df = pd.read_csv(uploaded_file)
-        
-        # Validasi: Cek apakah semua fitur yang dibutuhkan ada di dalam file CSV tersebut
-        missing_cols = [col for col in features if col not in input_df.columns]
-        
-        if missing_cols:
-            st.error(f"❌ File CSV kekurangan kolom berikut: {', '.join(missing_cols)}")
-        else:
-            # Mengambil data fitur saja sesuai urutan yang benar untuk input model
-            X_manual = input_df[features]
-            
-            # Melakukan prediksi massal
-            pred_lr = lr_model.predict(X_manual)
-            pred_dt = dt_model.predict(X_manual)
-            
-            # Membuat dataframe baru untuk menampung hasil
-            output_df = input_df.copy()
-            output_df["Prediksi Linear Regression"] = pred_lr
-            output_df["Prediksi Decision Tree"] = pred_dt
-            
-            st.success("🎉 Prediksi Berhasil! Berikut adalah hasil data beserta prediksinya:")
-            
-            # Menampilkan hasil data ke dalam tabel Streamlit dengan format mata uang Rp
-            st.dataframe(
-                output_df.style.format({
-                    "Prediksi Linear Regression": "Rp {:,.2f}",
-                    "Prediksi Decision Tree": "Rp {:,.2f}",
-                    "Open": "{:,.2f}",
-                    "High": "{:,.2f}",
-                    "Low": "{:,.2f}",
-                    "Volume": "{:,.0f}",
-                    "Daily Return": "{:,.4f}",
-                    "SMA_50": "{:,.2f}",
-                    "SMA_200": "{:,.2f}",
-                    "RSI": "{:,.2f}"
-                }), 
-                use_container_width=True
-            )
-            
-            # Menyediakan tombol download untuk mengunduh hasil prediksi berupa file CSV baru
-            csv_buffer = output_df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📥 Unduh Hasil Prediksi (.csv)",
-                data=csv_buffer,
-                file_name="hasil_prediksi_ihsg.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
-            
-    except Exception as e:
-        st.error(f"🚨 Terjadi kesalahan saat memproses file: {e}")
-    except Exception as e:
-        st.error(f"🚨 Terjadi kesalahan saat memproses file: {e}")
+st.divider()
+st.caption("Dibuat dengan Streamlit · Data Integration Dashboard")
