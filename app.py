@@ -307,9 +307,8 @@ ax14.set_title("Perbandingan MAPE antar Model"); plt.tight_layout()
 st.pyplot(fig14); plt.close()
 
 # ── 6. Prediksi via File CSV ───────────────────
-# ── 6. Prediksi via File CSV ───────────────────
 st.header("6. Prediksi via File CSV")
-st.markdown("Unggah file `.csv` yang berisi kolom fitur untuk mendapatkan prediksi harga penutupan secara massal.")
+st.markdown("Apakah ada saham lain yang ingin anda analisis? Jika ada, anda bisa mengunggah file `.csv` yang berisi kolom fitur untuk mendapatkan prediksi harga penutupan secara massal.")
 
 # Memberitahu user format kolom yang wajib ada di dalam file CSV
 st.info(f"💡 **Format Kolom CSV Harus Tepat:** {', '.join(features)}")
