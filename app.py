@@ -28,7 +28,7 @@ st.set_page_config(
     layout="wide",
 )
 
-st.title("📈 Prediksi Harga Saham JKSE")
+st.title("📈 Prediksi Harga Saham Jakarta Stock Exchange Composite")
 st.caption("Linear Regression vs Decision Tree Regressor · Opsi Multipurpose Dataset Source")
 
 # ─────────────────────────────────────────────
