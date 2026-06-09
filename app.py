@@ -346,14 +346,12 @@ if uploaded_file is not None:
                 output_df.style.format({
                     "Prediksi Linear Regression": "Rp {:,.2f}",
                     "Prediksi Decision Tree": "Rp {:,.2f}",
-                    "Open": "{:,.2f}",
-                    "High": "{:,.2f}",
-                    "Low": "{:,.2f}",
-                    "Volume": "{:,.0f}",
-                    "Daily Return": "{:,.4f}",
-                    "SMA_50": "{:,.2f}",
-                    "SMA_200": "{:,.2f}",
-                    "RSI": "{:,.2f}"
+                    "Close": "{:,.2f}",
+                    "Pembukaan": "{:,.2f}",
+                    "Tertinggi": "{:,.2f}",
+                    "Terendah": "{:,.2f}",
+                    "Vol.": "{:,.0f}",
+                    "Perubahan%": "{:,.4f}",
                 }), 
                 use_container_width=True
             )
