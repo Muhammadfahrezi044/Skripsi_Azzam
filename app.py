@@ -115,7 +115,9 @@ plt.tight_layout()
 st.pyplot(fig); plt.close()
 
 # Candlestick (setahun terakhir)
-last_year = df.last("365D").copy()
+terakhir = df.index.max()
+mulai_tanggal = terakhir - pd.Timedelta(days=365)
+last_year = df.loc[mulai_tanggal:].copy()
 fig2, ax2 = plt.subplots(figsize=(14, 5))
 for date, row in last_year.iterrows():
     color = "green" if row["Close"] >= row["Open"] else "red"
