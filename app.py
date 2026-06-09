@@ -28,6 +28,9 @@ st.set_page_config(
     layout="wide",
 )
 
+if "analisis_berjalan" not in st.session_state:
+    st.session_state["analisis_berjalan"] = False
+
 st.title("📈 Prediksi Harga Saham IHSG (^JKSE)")
 st.caption("Linear Regression vs Decision Tree Regressor · Data: Yahoo Finance")
 
@@ -41,8 +44,8 @@ with st.sidebar:
     test_size  = st.slider("Ukuran Data Uji (%)", min_value=10, max_value=40, value=20, step=5)
     dt_depth   = st.slider("Max Depth Decision Tree", min_value=3, max_value=20, value=10)
     rsi_period = st.slider("Periode RSI", min_value=7, max_value=28, value=14)
-    run_btn    = st.button("🚀 Jalankan Analisis", use_container_width=True)
-
+    if st.button("🚀 Jalankan Analisis", use_container_width=True):
+        st.session_state["analisis_berjalan"] = True
 # ─────────────────────────────────────────────
 # HELPERS
 # ─────────────────────────────────────────────
@@ -80,7 +83,7 @@ def evaluate(y_true, y_pred, name):
 # ─────────────────────────────────────────────
 # MAIN
 # ─────────────────────────────────────────────
-if not run_btn:
+if not st.session_state["analisis_berjalan"]:
     st.info("👈 Atur parameter di sidebar lalu klik **Jalankan Analisis**.")
     st.stop()
 
