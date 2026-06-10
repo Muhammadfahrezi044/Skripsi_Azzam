@@ -376,29 +376,39 @@ st.dataframe(importance_df, use_container_width=True)
 # ── 5. Evaluasi Model ─────────────────────────
 st.header("5. Evaluasi Model")
 
-# Menggunakan nama model bahasa Inggris agar sama dengan gambar
-res_lr = evaluate(y_test, y_pred_lr, "Linear Regression")
-res_dt = evaluate(y_test, y_pred_dt, "Decision Tree")
+# Fungsi evaluate disesuaikan tepat dengan nama kolom di fail .ipynb
+def evaluate_notebook(y_true, y_pred, name):
+    return {
+        "Model": name,
+        "MAPE (%)": mean_absolute_percentage_error(y_true, y_pred) * 100,
+        "MAE": mean_absolute_error(y_true, y_pred),
+        "MSE": mean_squared_error(y_true, y_pred),
+        "RMSE": np.sqrt(mean_squared_error(y_true, y_pred)),
+        "R²": r2_score(y_true, y_pred),
+    }
+
+res_lr = evaluate_notebook(y_test, y_pred_lr, "Linear Regression")
+res_dt = evaluate_notebook(y_test, y_pred_dt, "Decision Tree")
 hasil = pd.DataFrame([res_lr, res_dt])
 
 st.subheader("Metrik Evaluasi")
 st.dataframe(
     hasil.set_index("Model").style.format({
+        "MAPE (%)": "{:.6f}%",
         "MAE": "{:.6f}",
         "MSE": "{:.6f}",
         "RMSE": "{:.6f}",
-        "R2 Score": "{:.6f}",
-        "MAPE": "{:.6f}%",
+        "R²": "{:.6f}",
     }),
     use_container_width=True,
 )
 
-# Tabel MAPE singkat
+# Tabel MAPE singkat (sesuai notebook cell 70)
 tabel_mape = pd.DataFrame({
     "Model": ["Linear Regression", "Decision Tree"],
     "MAPE": [
-        f"{res_lr['MAPE']:.4f}%",
-        f"{res_dt['MAPE']:.4f}%",
+        f"{res_lr['MAPE (%)']:.4f}%",
+        f"{res_dt['MAPE (%)']:.4f}%",
     ],
 })
 st.subheader("Ringkasan MAPE")
@@ -464,13 +474,13 @@ fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
 axes[0].scatter(y_test, y_pred_lr, alpha=0.5, color="blue")
 axes[0].plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], "k--")
-axes[0].set_title(f"Linear Regression (MAPE={res_lr['MAPE']:.4f}%)")
+axes[0].set_title(f"Linear Regression (MAPE={res_lr['MAPE (%)']:.4f}%)")
 axes[0].set_xlabel("Aktual")
 axes[0].set_ylabel("Prediksi")
 
 axes[1].scatter(y_test, y_pred_dt, alpha=0.5, color="red")
 axes[1].plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], "k--")
-axes[1].set_title(f"Decision Tree (MAPE={res_dt['MAPE']:.4f}%)")
+axes[1].set_title(f"Decision Tree (MAPE={res_dt['MAPE (%)']:.4f}%)")
 axes[1].set_xlabel("Aktual")
 axes[1].set_ylabel("Prediksi")
 
@@ -499,18 +509,18 @@ plt.close()
 
 # ── 5.6 Perbandingan MAPE ──
 fig, ax = plt.subplots(figsize=(7, 4))
-sns.barplot(x="Model", y="MAPE", data=hasil, palette=["steelblue", "tomato"], ax=ax)
-for i, v in enumerate(hasil["MAPE"]):
+sns.barplot(x="Model", y="MAPE (%)", data=hasil, palette=["steelblue", "tomato"], ax=ax)
+for i, v in enumerate(hasil["MAPE (%)"]):
     ax.text(i, v + 0.02, f"{v:.4f}%", ha="center", fontweight="bold")
 ax.set_title("Perbandingan MAPE antar Model")
 plt.tight_layout()
 st.pyplot(fig)
 plt.close()
 
-# ── 5.7 Perbandingan Metrik Error (MAPE, MAE, RMSE) ──
+# ── 5.7 Perbandingan Metrik Error (Sesuai Notebook Cell 84) ──
 hasil_melt = hasil.melt(
     id_vars="Model",
-    value_vars=["MAPE", "MAE", "RMSE"],
+    value_vars=["MAPE (%)", "MAE", "RMSE"],
     var_name="Metrik",
     value_name="Nilai",
 )
@@ -525,14 +535,12 @@ plt.close()
 # ── 6. Kesimpulan ──────────────────────────────
 st.header("6. Kesimpulan")
 st.markdown(f"""
-- **Regresi Linier** menghasilkan performa yang lebih baik dengan **MAPE {res_lr['MAPE (%)']:.4f}%** 
-  dibandingkan Decision Tree (**MAPE {res_dt['MAPE (%)']:.4f}%**).
+- **Linear Regression** menghasilkan performa yang lebih baik dengan **MAPE {res_lr['MAPE (%)']:.4f}%** dibandingkan Decision Tree (**MAPE {res_dt['MAPE (%)']:.4f}%**).
 
 - Model **Linear Regression** memiliki **R² {res_lr['R²']:.6f}** yang menunjukkan model mampu 
   menjelaskan sekitar **{(res_lr['R²'] * 100):.2f}%** variabilitas data.
 
-- **Feature Importance** pada Decision Tree menunjukkan bahwa fitur **High**, **Low**, dan **SMA_50** 
-  memiliki pengaruh terbesar terhadap prediksi harga penutupan.
+- **Feature Importance** pada Decision Tree menunjukkan bahwa fitur **High**, **Low**, dan **SMA_50** memiliki pengaruh terbesar terhadap prediksi harga penutupan.
 
 - Dari **matriks korelasi**, terlihat bahwa fitur **Close** (target) memiliki korelasi sangat tinggi 
   dengan **Open**, **High**, **Low**, dan **SMA_50** (semua di atas 0.99), yang menjelaskan 
@@ -541,6 +549,3 @@ st.markdown(f"""
 - Nilai **Koefisien Variasi (CV)** yang rendah (di bawah 10% untuk semua tahun) menunjukkan 
   bahwa data relatif stabil, dengan volatilitas tertinggi terjadi pada tahun 2020 (10.49%).
 """)
-
-st.divider()
-st.caption("Dibuat dengan Streamlit · Data: Yahoo Finance (^JKSE)")
