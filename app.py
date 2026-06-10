@@ -393,12 +393,12 @@ st.dataframe(
     use_container_width=True,
 )
 
-# Tabel MAPE singkat (sesuai notebook cell 70)
+# Tabel MAPE singkat
 tabel_mape = pd.DataFrame({
-    "Model": ["Regresi Linier", "Regresi Pohon Keputusan"],
+    "Model": ["Linear Regression", "Decision Tree"],
     "MAPE": [
-        f"{res_lr['MAPE (%)']:.4f}%",
-        f"{res_dt['MAPE (%)']:.4f}%",
+        f"{res_lr['MAPE']:.4f}%",
+        f"{res_dt['MAPE']:.4f}%",
     ],
 })
 st.subheader("Ringkasan MAPE")
@@ -464,13 +464,13 @@ fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
 axes[0].scatter(y_test, y_pred_lr, alpha=0.5, color="blue")
 axes[0].plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], "k--")
-axes[0].set_title(f"Linear Regression (MAPE={res_lr['MAPE (%)']:.2f}%)")
+axes[0].set_title(f"Linear Regression (MAPE={res_lr['MAPE']:.4f}%)")
 axes[0].set_xlabel("Aktual")
 axes[0].set_ylabel("Prediksi")
 
 axes[1].scatter(y_test, y_pred_dt, alpha=0.5, color="red")
 axes[1].plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], "k--")
-axes[1].set_title(f"Decision Tree (MAPE={res_dt['MAPE (%)']:.2f}%)")
+axes[1].set_title(f"Decision Tree (MAPE={res_dt['MAPE']:.4f}%)")
 axes[1].set_xlabel("Aktual")
 axes[1].set_ylabel("Prediksi")
 
@@ -499,18 +499,18 @@ plt.close()
 
 # ── 5.6 Perbandingan MAPE ──
 fig, ax = plt.subplots(figsize=(7, 4))
-sns.barplot(x="Model", y="MAPE (%)", data=hasil, palette=["steelblue", "tomato"], ax=ax)
-for i, v in enumerate(hasil["MAPE (%)"]):
+sns.barplot(x="Model", y="MAPE", data=hasil, palette=["steelblue", "tomato"], ax=ax)
+for i, v in enumerate(hasil["MAPE"]):
     ax.text(i, v + 0.02, f"{v:.4f}%", ha="center", fontweight="bold")
 ax.set_title("Perbandingan MAPE antar Model")
 plt.tight_layout()
 st.pyplot(fig)
 plt.close()
 
-# ── 5.7 Perbandingan Metrik Error (MAPE, MAE, RMSE) – sesuai notebook cell 84 ──
+# ── 5.7 Perbandingan Metrik Error (MAPE, MAE, RMSE) ──
 hasil_melt = hasil.melt(
     id_vars="Model",
-    value_vars=["MAPE (%)", "MAE", "RMSE"],
+    value_vars=["MAPE", "MAE", "RMSE"],
     var_name="Metrik",
     value_name="Nilai",
 )
