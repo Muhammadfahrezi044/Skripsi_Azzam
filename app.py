@@ -73,10 +73,11 @@ def compute_rsi(series, period=14):
 def evaluate(y_true, y_pred, name):
     return {
         "Model": name,
-        "MAPE (%)": mean_absolute_percentage_error(y_true, y_pred) * 100,
         "MAE": mean_absolute_error(y_true, y_pred),
+        "MSE": mean_squared_error(y_true, y_pred),
         "RMSE": np.sqrt(mean_squared_error(y_true, y_pred)),
-        "R²": r2_score(y_true, y_pred),
+        "R2 Score": r2_score(y_true, y_pred),
+        "MAPE": mean_absolute_percentage_error(y_true, y_pred) * 100,
     }
 
 
@@ -375,17 +376,19 @@ st.dataframe(importance_df, use_container_width=True)
 # ── 5. Evaluasi Model ─────────────────────────
 st.header("5. Evaluasi Model")
 
-res_lr = evaluate(y_test, y_pred_lr, "Regresi Linier")
-res_dt = evaluate(y_test, y_pred_dt, "Regresi Pohon Keputusan")
+# Menggunakan nama model bahasa Inggris agar sama dengan gambar
+res_lr = evaluate(y_test, y_pred_lr, "Linear Regression")
+res_dt = evaluate(y_test, y_pred_dt, "Decision Tree")
 hasil = pd.DataFrame([res_lr, res_dt])
 
 st.subheader("Metrik Evaluasi")
 st.dataframe(
     hasil.set_index("Model").style.format({
-        "MAPE (%)": "{:.4f}",
-        "MAE": "{:,.2f}",
-        "RMSE": "{:,.2f}",
-        "R²": "{:.4f}",
+        "MAE": "{:.6f}",
+        "MSE": "{:.6f}",
+        "RMSE": "{:.6f}",
+        "R2 Score": "{:.6f}",
+        "MAPE": "{:.6f}%",
     }),
     use_container_width=True,
 )
